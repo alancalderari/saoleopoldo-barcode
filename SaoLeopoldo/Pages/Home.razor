@@ -1,0 +1,122 @@
+﻿@page "/"
+@using System.Text.Json
+@inject HttpClient _HttpClient
+
+<PageTitle>Home</PageTitle>
+
+<h1>Hello, world!</h1>
+
+<BlazorBarcodeScanner.ZXing.JS.BarcodeReader
+    Title=""
+    StartCameraAutomatically="true"
+    ShowStart="false"
+    ShowReset="false"
+    ShowResult="false"
+    ShowStop="false"
+    ShowToggleTorch="false"
+    ShowVideoDeviceList="false"
+    VideoWidth="300"
+    VideoHeight="200"
+    OnBarcodeReceived="LocalReceivedBarcodeText"/>
+
+@if (!Products.Any())
+{
+    <p>
+        <em>Loading...</em>
+    </p>
+}
+else
+{
+    <table class="table">
+        <thead>
+        <tr>
+            <th>Código de barras</th>
+            <th>Nome</th>
+            <th>Quantidade</th>
+            <th>#</th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (var product in Products)
+        {
+            <tr>
+                <td>@product.Barcode</td>
+                <td>@product.Name</td>
+                <td>@product.Quantity</td>
+                <td></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+@code{
+
+    private string LocalBarcodeText;
+    private List<Product> Products = [];
+
+    private void LocalReceivedBarcodeText(BarcodeReceivedEventArgs args)
+    {
+        var barCode = args.BarcodeText;
+        var nameProduct = GetNameProduct(barCode);
+        
+        var product = Products.Find(x => x.Barcode == barCode);
+
+        if (product is null)
+        {
+            product = AddProduct(barCode, nameProduct);
+            Products.Add(product);
+        }
+        else
+        {
+            product.Quantity++;
+        }
+        
+        StateHasChanged();
+    }
+
+    private Product AddProduct(string barCode, string? nameProduct)
+    {
+        return new Product(barCode, nameProduct);
+    }
+
+    private string? GetNameProduct(string barcode)
+    {
+        var json = _HttpClient.GetStringAsync($"https://compras.menorpreco.pr.gov.br/api/v1/compras/buscaitem/{barcode}").Result;
+
+        var obj = JsonSerializer.Deserialize<Produto>(json, new JsonSerializerOptions()
+        {
+            PropertyNameCaseInsensitive = true
+        });
+        
+        var name = obj?.desc_ccg ?? obj?.NFes.FirstOrDefault()?.descricao;
+        
+        return name;
+    }
+
+    public class Produto
+    {
+        public string gtin { get; set; }
+        public string desc_ccg { get; set; }
+        public List<Nfe> NFes { get; set; }
+    }
+
+    public abstract class Nfe
+    {
+        public string descricao { get; set; }
+    }
+
+    public class Product
+    {
+        public Product(string barcode, string name)
+        {
+            Barcode = barcode;
+            Name = name;
+            Quantity = 1;
+        }
+        
+        public string Barcode { get; set; }
+        public string Name { get; set; }
+        public int Quantity { get; set; }
+    }
+    
+}
