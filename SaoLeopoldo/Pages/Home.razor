@@ -49,16 +49,17 @@ else
         </tbody>
     </table>
 }
+
 @code{
 
     private string LocalBarcodeText;
     private List<Product> Products = [];
 
-    private void LocalReceivedBarcodeText(BarcodeReceivedEventArgs args)
+    private async void LocalReceivedBarcodeText(BarcodeReceivedEventArgs args)
     {
         var barCode = args.BarcodeText;
-        var nameProduct = GetNameProduct(barCode);
-        
+        var nameProduct = await GetNameProduct(barCode);
+
         var product = Products.Find(x => x.Barcode == barCode);
 
         if (product is null)
@@ -70,7 +71,7 @@ else
         {
             product.Quantity++;
         }
-        
+
         StateHasChanged();
     }
 
@@ -79,31 +80,42 @@ else
         return new Product(barCode, nameProduct);
     }
 
-    private string? GetNameProduct(string barcode)
+    private async Task<string?> GetNameProduct(string barcode)
     {
-        var json = _HttpClient.GetStringAsync($"https://compras.menorpreco.pr.gov.br/api/v1/compras/buscaitem/{barcode}").Result;
+        var response = await _HttpClient.GetAsync($"https://compras.menorpreco.pr.gov.br/api/v1/compras/buscaitem/{barcode}");
 
-        var obj = JsonSerializer.Deserialize<Produto>(json, new JsonSerializerOptions()
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        var json = await response?.Content?.ReadAsStringAsync()!;
+
+        var objBase = JsonSerializer.Deserialize<RootObject>(json, new JsonSerializerOptions()
         {
             PropertyNameCaseInsensitive = true
         });
         
-        var name = obj?.desc_ccg ?? obj?.NFes.FirstOrDefault()?.descricao;
-        
+        var obj = objBase.produtos.FirstOrDefault();
+
+        var name = obj?.desc_ccg ?? obj?.nfe.FirstOrDefault()?.descricao;
+
         return name;
     }
 
-    public class Produto
-    {
-        public string gtin { get; set; }
-        public string desc_ccg { get; set; }
-        public List<Nfe> NFes { get; set; }
-    }
+    public record RootObject(
+        Produtos[] produtos
+    );
 
-    public abstract class Nfe
-    {
-        public string descricao { get; set; }
-    }
+    public record Produtos(
+        string gtin,
+        string desc_ccg,
+        Nfe[] nfe
+    );
+
+    public record Nfe(
+        string descricao
+    );
 
     public class Product
     {
@@ -113,10 +125,10 @@ else
             Name = name;
             Quantity = 1;
         }
-        
+
         public string Barcode { get; set; }
         public string Name { get; set; }
         public int Quantity { get; set; }
     }
-    
+
 }
