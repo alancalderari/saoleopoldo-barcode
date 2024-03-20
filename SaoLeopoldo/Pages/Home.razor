@@ -74,7 +74,7 @@ else
         StateHasChanged();
     }
 
-    private Product AddProduct(string barCode, string? nameProduct)
+    private static Product AddProduct(string barCode, string? nameProduct)
     {
         return new Product(barCode, nameProduct);
     }
